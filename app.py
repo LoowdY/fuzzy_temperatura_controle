@@ -2,7 +2,7 @@ import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import time
 import matplotlib
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -17,6 +17,21 @@ class InterfaceControleFuzzy:
         self.raiz = raiz
         self.raiz.title("Sistema de Controle Fuzzy - Chuveiro Inteligente")
         self.raiz.state('zoomed')  # Maximiza a janela
+
+        # Parâmetros das funções de pertinência
+        self.parametros_erro_valores = {
+            'muito_negativo': [-30, -30, -15],
+            'negativo': [-20, -10, 0],
+            'neutro': [-5, 0, 5],
+            'positivo': [0, 10, 20],
+            'muito_positivo': [15, 30, 30]
+        }
+
+        self.parametros_var_valores = {
+            'diminuindo': [-10, -10, 0],
+            'estavel': [-2, 0, 2],
+            'aumentando': [0, 10, 10]
+        }
 
         # Criação do sistema fuzzy
         self.configurar_sistema_fuzzy()
@@ -41,16 +56,12 @@ class InterfaceControleFuzzy:
         self.potencia = ctrl.Consequent(np.arange(0, 101, 1), 'potencia')
 
         # Funções de pertinência para Erro de Temperatura
-        self.erro_temperatura['muito_negativo'] = fuzz.trimf(self.erro_temperatura.universe, [-30, -30, -15])
-        self.erro_temperatura['negativo'] = fuzz.trimf(self.erro_temperatura.universe, [-20, -10, 0])
-        self.erro_temperatura['neutro'] = fuzz.trimf(self.erro_temperatura.universe, [-5, 0, 5])
-        self.erro_temperatura['positivo'] = fuzz.trimf(self.erro_temperatura.universe, [0, 10, 20])
-        self.erro_temperatura['muito_positivo'] = fuzz.trimf(self.erro_temperatura.universe, [15, 30, 30])
+        for termo, params in self.parametros_erro_valores.items():
+            self.erro_temperatura[termo] = fuzz.trimf(self.erro_temperatura.universe, params)
 
         # Funções de pertinência para Variação de Temperatura
-        self.variacao_temp['diminuindo'] = fuzz.trimf(self.variacao_temp.universe, [-10, -10, 0])
-        self.variacao_temp['estavel'] = fuzz.trimf(self.variacao_temp.universe, [-2, 0, 2])
-        self.variacao_temp['aumentando'] = fuzz.trimf(self.variacao_temp.universe, [0, 10, 10])
+        for termo, params in self.parametros_var_valores.items():
+            self.variacao_temp[termo] = fuzz.trimf(self.variacao_temp.universe, params)
 
         # Funções de pertinência para Potência
         self.potencia['baixa'] = fuzz.trimf(self.potencia.universe, [0, 0, 50])
@@ -136,7 +147,7 @@ class InterfaceControleFuzzy:
         self.escala_temp_desejada.pack(side='left', padx=5, fill='x', expand=True)
         self.escala_temp_desejada.set(self.temperatura_desejada)
 
-        # Botões de Iniciar e Parar Simulação
+        # Botões de Iniciar, Parar e Resetar Simulação
         frame_botoes = ttk.Frame(frame_controles)
         frame_botoes.pack(side='left', padx=5)
 
@@ -145,6 +156,18 @@ class InterfaceControleFuzzy:
 
         self.botao_parar = ttk.Button(frame_botoes, text="Parar Simulação", command=self.parar_simulacao, state='disabled')
         self.botao_parar.pack(side='left', padx=2)
+
+        self.botao_reset = ttk.Button(frame_botoes, text="Resetar Simulação", command=self.reset_simulacao, state='disabled')
+        self.botao_reset.pack(side='left', padx=2)
+
+        # Barra de Progresso para Potência
+        frame_progresso = ttk.LabelFrame(aba, text="Indicador de Potência")
+        frame_progresso.pack(fill='x', padx=5, pady=5)
+
+        self.barra_potencia = ttk.Progressbar(frame_progresso, orient='horizontal', length=400, mode='determinate')
+        self.barra_potencia.pack(padx=10, pady=10)
+        self.barra_potencia['maximum'] = 100
+        self.barra_potencia['value'] = 0
 
         # Frame para informações de simulação
         frame_info = ttk.LabelFrame(aba, text="Informações da Simulação")
@@ -186,10 +209,80 @@ class InterfaceControleFuzzy:
         frame_info.pack(fill='both', expand=True, padx=5, pady=5)
 
         # Texto para exibir as funções de pertinência
-        self.texto_fuzzy = tk.Text(frame_info, wrap=tk.WORD, height=25)
+        self.texto_fuzzy = tk.Text(frame_info, wrap=tk.WORD, height=15)
         self.texto_fuzzy.pack(fill='both', expand=True, padx=5, pady=5)
         self.texto_fuzzy.config(state='disabled')
         self.atualizar_fuzzy_interno()
+
+        # Frame para editar funções de pertinência
+        frame_editar = ttk.LabelFrame(aba, text="Editar Funções de Pertinência")
+        frame_editar.pack(fill='both', expand=True, padx=5, pady=5)
+
+        # Tabelas para Erro de Temperatura
+        frame_erro = ttk.LabelFrame(frame_editar, text="Erro de Temperatura")
+        frame_erro.pack(side='left', fill='both', expand=True, padx=5, pady=5)
+
+        self.parametros_erro = {}
+        termos_erro = ['muito_negativo', 'negativo', 'neutro', 'positivo', 'muito_positivo']
+        for i, termo in enumerate(termos_erro):
+            ttk.Label(frame_erro, text=termo).grid(row=i, column=0, padx=5, pady=2, sticky='e')
+            # Obtém os parâmetros atuais
+            a, b, c = self.parametros_erro_valores[termo]
+            # Adiciona spinboxes para editar os parâmetros
+            ttk.Label(frame_erro, text=f"a:").grid(row=i, column=1, padx=5, pady=2, sticky='e')
+            spin_a = tk.Spinbox(frame_erro, from_=-30, to=30, increment=1, width=5)
+            spin_a.grid(row=i, column=2, padx=5, pady=2, sticky='w')
+            spin_a.delete(0, 'end')
+            spin_a.insert(0, a)
+
+            ttk.Label(frame_erro, text=f"b:").grid(row=i, column=3, padx=5, pady=2, sticky='e')
+            spin_b = tk.Spinbox(frame_erro, from_=-30, to=30, increment=1, width=5)
+            spin_b.grid(row=i, column=4, padx=5, pady=2, sticky='w')
+            spin_b.delete(0, 'end')
+            spin_b.insert(0, b)
+
+            ttk.Label(frame_erro, text=f"c:").grid(row=i, column=5, padx=5, pady=2, sticky='e')
+            spin_c = tk.Spinbox(frame_erro, from_=-30, to=30, increment=1, width=5)
+            spin_c.grid(row=i, column=6, padx=5, pady=2, sticky='w')
+            spin_c.delete(0, 'end')
+            spin_c.insert(0, c)
+
+            self.parametros_erro[termo] = [spin_a, spin_b, spin_c]
+
+        # Tabelas para Variação de Temperatura
+        frame_var = ttk.LabelFrame(frame_editar, text="Variação de Temperatura")
+        frame_var.pack(side='left', fill='both', expand=True, padx=5, pady=5)
+
+        self.parametros_var = {}
+        termos_var = ['diminuindo', 'estavel', 'aumentando']
+        for i, termo in enumerate(termos_var):
+            ttk.Label(frame_var, text=termo).grid(row=i, column=0, padx=5, pady=2, sticky='e')
+            # Obtém os parâmetros atuais
+            a, b, c = self.parametros_var_valores[termo]
+            # Adiciona spinboxes para editar os parâmetros
+            ttk.Label(frame_var, text=f"a:").grid(row=i, column=1, padx=5, pady=2, sticky='e')
+            spin_a = tk.Spinbox(frame_var, from_=-10, to=10, increment=1, width=5)
+            spin_a.grid(row=i, column=2, padx=5, pady=2, sticky='w')
+            spin_a.delete(0, 'end')
+            spin_a.insert(0, a)
+
+            ttk.Label(frame_var, text=f"b:").grid(row=i, column=3, padx=5, pady=2, sticky='e')
+            spin_b = tk.Spinbox(frame_var, from_=-10, to=10, increment=1, width=5)
+            spin_b.grid(row=i, column=4, padx=5, pady=2, sticky='w')
+            spin_b.delete(0, 'end')
+            spin_b.insert(0, b)
+
+            ttk.Label(frame_var, text=f"c:").grid(row=i, column=5, padx=5, pady=2, sticky='e')
+            spin_c = tk.Spinbox(frame_var, from_=-10, to=10, increment=1, width=5)
+            spin_c.grid(row=i, column=6, padx=5, pady=2, sticky='w')
+            spin_c.delete(0, 'end')
+            spin_c.insert(0, c)
+
+            self.parametros_var[termo] = [spin_a, spin_b, spin_c]
+
+        # Botão para Aplicar Alterações
+        self.botao_aplicar = ttk.Button(frame_editar, text="Aplicar Alterações", command=self.aplicar_alteracoes_fuzzy)
+        self.botao_aplicar.pack(pady=10)
 
     def configurar_aba_regras_info(self):
         aba = self.abas["Regras e Informações"]
@@ -277,6 +370,7 @@ class InterfaceControleFuzzy:
             self.executando = True
             self.botao_iniciar.config(state='disabled')
             self.botao_parar.config(state='normal')
+            self.botao_reset.config(state='normal')
             self.atualizar()
 
     def parar_simulacao(self):
@@ -284,6 +378,45 @@ class InterfaceControleFuzzy:
             self.executando = False
             self.botao_iniciar.config(state='normal')
             self.botao_parar.config(state='disabled')
+            self.botao_reset.config(state='normal')
+
+    def reset_simulacao(self):
+        # Resetando as variáveis de simulação
+        self.temperatura_atual = 20.0
+        self.temperatura_desejada = 25.0
+        self.historico_temp = [self.temperatura_atual]
+        self.historico_potencia = [0.0]
+        self.ultimo_tempo = time.time()
+
+        # Atualizando os widgets
+        self.label_temp_desejada.config(text=f"{self.temperatura_desejada:.1f}°C")
+        self.escala_temp_desejada.set(self.temperatura_desejada)
+        self.label_temp_atual_sim.config(text=f"Temperatura Atual: {self.temperatura_atual:.1f}°C")
+        self.label_erro_sim.config(text=f"Erro de Temperatura: {0.0:.1f}°C")
+        self.label_temp_atual_crisp.config(text=f"Temperatura Atual: {self.temperatura_atual:.1f}°C")
+        self.label_variacao_crisp.config(text=f"Variação: 0°C/s")
+        self.label_potencia_crisp.config(text=f"Potência: 0%")
+        self.barra_potencia['value'] = 0
+
+        # Resetando os gráficos
+        self.line_temp.set_data([], [])
+        self.ax_temp.set_xlim(-100, 0)
+        self.ax_temp.set_ylim(0, 50)
+        self.ax_temp.figure.canvas.draw()
+
+        self.line_pot.set_data([], [])
+        self.ax_pot.set_xlim(-100, 0)
+        self.ax_pot.set_ylim(0, 100)
+        self.ax_pot.figure.canvas.draw()
+
+        # Atualizando os textos de fuzzificação e defuzzificação
+        self.atualizar_fuzzy_interno()
+        self.atualizar_variaveis_processos_interface(0.0, 0.0, 0.0)
+        self.atualizar_verificacao_regras(0.0, 0.0, 0.0)
+
+        # Desativar o botão Reset se a simulação não estiver executando
+        if not self.executando:
+            self.botao_reset.config(state='disabled')
 
     def atualizar_temp_desejada(self, valor):
         self.temperatura_desejada = float(valor)
@@ -292,6 +425,9 @@ class InterfaceControleFuzzy:
     def atualizar_temperatura(self, potencia):
         tempo_atual = time.time()
         delta_t = tempo_atual - self.ultimo_tempo
+
+        # Limitar delta_t para evitar grandes variações
+        delta_t = min(delta_t, 1.0)  # Limita delta_t a no máximo 1 segundo
 
         # Ajuste no fator ambiental para simular troca de calor com o ambiente
         fator_ambiente = -0.05 * (self.temperatura_atual - 20)  # Reduzido para suavizar a variação
@@ -323,12 +459,12 @@ class InterfaceControleFuzzy:
     def atualizar_fuzzy_interno(self):
         # Atualiza as informações das funções de pertinência na aba "Sistema Fuzzy Interno"
         info_fuzzy = "Funções de Pertinência para Erro de Temperatura:\n"
-        for termo in self.erro_temperatura.terms:
-            info_fuzzy += f"  - {termo}: {self.erro_temperatura[termo].mf.tolist()}\n"
+        for termo, params in self.parametros_erro_valores.items():
+            info_fuzzy += f"  - {termo}: {params}\n"
 
         info_fuzzy += "\nFunções de Pertinência para Variação de Temperatura:\n"
-        for termo in self.variacao_temp.terms:
-            info_fuzzy += f"  - {termo}: {self.variacao_temp[termo].mf.tolist()}\n"
+        for termo, params in self.parametros_var_valores.items():
+            info_fuzzy += f"  - {termo}: {params}\n"
 
         info_fuzzy += "\nFunções de Pertinência para Potência:\n"
         for termo in self.potencia.terms:
@@ -343,6 +479,7 @@ class InterfaceControleFuzzy:
         self.label_temp_atual_crisp.config(text=f"Temperatura Atual: {self.temperatura_atual:.1f}°C")
         self.label_variacao_crisp.config(text=f"Variação: {variacao:.2f}°C/s")
         self.label_potencia_crisp.config(text=f"Potência: {potencia:.1f}%")
+        self.barra_potencia['value'] = potencia
 
     def atualizar_verificacao_regras(self, erro, variacao, potencia):
         # Atualiza as regras ativas e suas forças de disparo
@@ -399,6 +536,41 @@ class InterfaceControleFuzzy:
         self.texto_defuzzificacao.delete('1.0', tk.END)
         self.texto_defuzzificacao.insert('1.0', info_defuzzificacao)
         self.texto_defuzzificacao.config(state='disabled')
+
+    def aplicar_alteracoes_fuzzy(self):
+        # Coleta os novos parâmetros para Erro de Temperatura
+        for termo, spins in self.parametros_erro.items():
+            try:
+                a = float(spins[0].get())
+                b = float(spins[1].get())
+                c = float(spins[2].get())
+                # Atualiza os valores das funções de pertinência
+                self.parametros_erro_valores[termo] = [a, b, c]
+                self.erro_temperatura[termo].mf = fuzz.trimf(self.erro_temperatura.universe, [a, b, c])
+            except ValueError:
+                messagebox.showerror("Erro", f"Valores inválidos para a função de pertinência '{termo}'. Certifique-se de inserir números válidos.")
+                return
+
+        # Coleta os novos parâmetros para Variação de Temperatura
+        for termo, spins in self.parametros_var.items():
+            try:
+                a = float(spins[0].get())
+                b = float(spins[1].get())
+                c = float(spins[2].get())
+                # Atualiza os valores das funções de pertinência
+                self.parametros_var_valores[termo] = [a, b, c]
+                self.variacao_temp[termo].mf = fuzz.trimf(self.variacao_temp.universe, [a, b, c])
+            except ValueError:
+                messagebox.showerror("Erro", f"Valores inválidos para a função de pertinência '{termo}'. Certifique-se de inserir números válidos.")
+                return
+
+        # Atualiza o sistema fuzzy com as novas funções de pertinência
+        self.configurar_sistema_fuzzy()
+        self.simulacao = ctrl.ControlSystemSimulation(self.sistema_ctrl)
+
+        # Atualiza as informações na interface
+        self.atualizar_fuzzy_interno()
+        messagebox.showinfo("Sucesso", "Funções de pertinência atualizadas com sucesso!")
 
     def atualizar(self):
         if self.executando:
